@@ -11,7 +11,7 @@ interface ChatMessageProps {
 
 export default function ChatMessage({
   message,
-  sender,
+  // sender,
   isReceiver,
   isFile,
 }: ChatMessageProps) {

@@ -1,92 +1,102 @@
-"use client";
-
+import { axiosInstance } from "@/utils/axios";
 import React, { useState, useEffect } from "react";
-import io, { Socket } from "socket.io-client";
+import io from "socket.io-client";
 
 interface Message {
-  sender: string;
-  content: string;
+  senderId: string;
+  receiverId: string;
+  message: string;
 }
 
-// Create the socket instance
-const socket = io("http://localhost:3001");
+interface ChatBoxProps {
+  state: {
+    id: string;
+    name: string;
+  };
+}
 
-export default function ChatBox() {
+export const socket = io("http://localhost:5000");
+
+const ChatBox: React.FC<ChatBoxProps> = ({ state }) => {
+  const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [inputMessage, setInputMessage] = useState<string>("");
+
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userId = user?.id;
 
   useEffect(() => {
-    // Listen for new messages
+    const fetchChat = async () => {
+      try {
+        
+        const res = await axiosInstance.get("http://localhost:5000/api/chat/messages");
+        setMessages((prevMessages) => [...prevMessages, ...res.data]);
+      } catch (error) {
+        console.error("Error fetching chat messages:", error);
+      }
+    };
+
+    fetchChat();
+    
     socket.on("receiveMessage", (newMessage: Message) => {
       setMessages((prevMessages) => [...prevMessages, newMessage]);
     });
 
-    // Cleanup socket connection on unmount
     return () => {
       socket.off("receiveMessage");
-      socket.disconnect();
     };
   }, []);
 
-  const handleSendMessage = () => {
-    if (inputMessage.trim() === "") return;
+  const sendMessage = () => {
+    if (message.trim()) {
+      if (!userId) {
+        console.error("User ID is not available in localStorage");
+        return;
+      }
 
-    const messageData: Message = {
-      sender: "User", // You can change this to the actual sender if needed
-      content: inputMessage,
-    };
+      const messageToSend = {
+        senderId: userId,
+        receiverId: state.id,
+        content: message,
+      };
 
-    // Emit the sendMessage event
-    socket.emit("sendMessage", messageData);
-    setInputMessage("");
-  };
-
-  const handleKeyPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      handleSendMessage();
+      socket.emit("sendMessage", messageToSend);
+      setMessage("");
+    } else {
+      console.error("Cannot send an empty message.");
     }
   };
 
   return (
     <div className="w-1/2 h-full p-4 bg-white flex flex-col">
-      {/* Header Section */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-bold text-xl">Chat</h2>
+        <h2 className="font-bold text-xl">Chat with {state.name || "User"}</h2>
       </div>
 
-      {/* Messages Section */}
       <div className="flex-1 overflow-y-auto mb-4">
         {messages.map((msg, index) => (
           <div
             key={index}
-            className={`flex ${
-              msg.sender === "User" ? "justify-end" : "justify-start"
-            } mb-2`}
+            className={`flex ${msg.senderId === userId ? "justify-start" : "justify-end"} mb-2`}
           >
             <div
-              className={`p-3 rounded-lg ${
-                msg.sender === "User" ? "bg-blue-600 text-white" : "bg-gray-200"
-              }`}
+              className={`p-3 rounded-lg ${msg.senderId === userId ? "bg-gray-200" : "bg-blue-600 text-white"}`}
             >
-              <p className="font-semibold">{msg.sender}</p>
-              <p>{msg.content}</p>
+              <p>{msg.message}</p>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Input Section */}
       <div className="flex items-center">
         <input
           type="text"
           placeholder="Write something..."
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          onKeyPress={handleKeyPress}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
           className="w-full p-2 rounded-lg border border-gray-300"
         />
         <button
-          onClick={handleSendMessage}
+          onClick={sendMessage}
           className="ml-2 p-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700"
         >
           Send
@@ -94,4 +104,6 @@ export default function ChatBox() {
       </div>
     </div>
   );
-}
+};
+
+export default ChatBox;
